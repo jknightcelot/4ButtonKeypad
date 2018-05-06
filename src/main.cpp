@@ -1,11 +1,22 @@
 #include <Arduino.h>
 #include <AceButton.h>
-#include "SimpleFSM.h"
+#include "Fsm.h"
 
 using namespace ace_button;
 
 // function prototypes
 void handleKeypadEvent(AceButton* button, uint8_t eventType, uint8_t buttonState);
+void setupKeypad();
+void setupLED();
+void setupFSM();
+void state_0_enter();
+void state_0_exit();
+void state_1_enter();
+void state_1_exit();
+void on_trans_state_0_state_1();
+void on_trans_state_0_state_0();
+void on_trans_state_1_state_0();
+void on_trans_state_1_state_1();
 
 #define ENABLE_SERIAL 1
 
@@ -14,8 +25,6 @@ const int KEYPAD_2_PIN = 3;     // KeyPad button mapped to pin
 const int KEYPAD_3_PIN = 4;     // KeyPad button mapped to pin
 const int KEYPAD_4_PIN = 5;     // KeyPad button mapped to pin
 
-// const int LED_PIN = 13; currently using the built in pin.
-
 // Keypad Buttons
 ButtonConfig keypadConfig;
 AceButton keypadButton1;
@@ -23,17 +32,84 @@ AceButton keypadButton2;
 AceButton keypadButton3;
 AceButton keypadButton4;
 
-// define states
-const SimpleFSM state0("State 0");
-const SimpleFSM state1("State 1");
-const SimpleFSM state2("State 2");
-const SimpleFSM &currentState = state0;
+int buttonPressCount = 0;
+
+// setup states
+/// setup event ids
+#define SUCCESS 0
+#define FAILURE 1
+
+/// holder of the current state
+int current_state;
+
+/// define states
+State state_0(state_0_enter, NULL, &state_0_exit);
+State state_1(state_1_enter, NULL, &state_1_exit);
+
+/// define Fsm
+Fsm fsm_button(&state_0);
 
 void setup() {
   #if ENABLE_SERIAL == 1
     Serial.begin(9600);
   #endif
 
+  setupKeypad();
+  setupLED();
+  setupFSM();
+
+  #if ENABLE_SERIAL == 1
+    while (! Serial); // Wait until Serial is ready - Leonardo
+    Serial.println(F("Machine Online"));
+  #endif
+
+}
+
+void loop() {
+  keypadButton1.check();
+  keypadButton2.check();
+  keypadButton3.check();
+  keypadButton4.check();
+}
+
+void handleKeypadEvent(AceButton* button, uint8_t eventType, uint8_t buttonState) {
+  if (eventType == AceButton::kEventPressed){
+    buttonPressCount++;
+    //TODO: this needs to move to a case statement rather than if.
+    if (button == &keypadButton1 && current_state == 0){
+      fsm_button.trigger(SUCCESS);
+      return;
+    }else{
+      fsm_button.trigger(FAILURE);
+    }
+
+    if (button == &keypadButton2 && current_state == 1){
+      fsm_button.trigger(SUCCESS);
+      return;
+    }else{
+      fsm_button.trigger(FAILURE);
+    }
+  }
+}
+
+void setupFSM(){
+  // add fsm transitions
+  fsm_button.add_transition(&state_0, &state_1,SUCCESS,&on_trans_state_0_state_1);
+  fsm_button.add_transition(&state_0, &state_0,FAILURE,&on_trans_state_0_state_0);
+  fsm_button.add_transition(&state_1, &state_0,SUCCESS,&on_trans_state_1_state_0);
+  fsm_button.add_transition(&state_1, &state_1,FAILURE,&on_trans_state_1_state_1);
+  // start the fsm
+  fsm_button.run_machine();
+}
+
+void setupLED(){
+  // initialize the LED pin as an output:
+  pinMode(LED_BUILTIN, OUTPUT);
+  // initialize the pushbutton pin as an input:
+  digitalWrite(LED_BUILTIN, LOW);
+}
+
+void setupKeypad(){
   // Simple config for the keypad buttons.
   keypadConfig.setEventHandler(handleKeypadEvent);
 
@@ -56,50 +132,43 @@ void setup() {
   pinMode(KEYPAD_4_PIN, INPUT_PULLUP);
   keypadButton4.setButtonConfig(&keypadConfig);
   keypadButton4.init(KEYPAD_4_PIN, HIGH, 4 /* ID */);
-
-  // initialize the LED pin as an output:
-  pinMode(LED_BUILTIN, OUTPUT);
-  // initialize the pushbutton pin as an input:
-  digitalWrite(LED_BUILTIN, LOW);
-
-  // setup states.
-
-  /// state0
-
-
-#if ENABLE_SERIAL == 1
-  while (! Serial); // Wait until Serial is ready - Leonardo
-  Serial.println(F("stopwatch ready"));
-#endif
 }
 
-void loop() {
-  keypadButton1.check();
-  keypadButton2.check();
-  keypadButton3.check();
-  keypadButton4.check();
+/// Transition callback functions
+void state_0_enter()
+{
+  Serial.println("Entering STATE_0");
+  current_state = 0;
 }
 
-void handleKeypadEvent(AceButton* button, uint8_t eventType, uint8_t buttonState) {
-  if (eventType == AceButton::kEventPressed){
-    Serial.println("A button was pressed.");
-    if (button == &keypadButton1 && currentState.getName() == state0.getName()){
-      Serial.println("It was button 1.");
+void state_0_exit()
+{
+  Serial.println("Exiting STATE_0");
+}
 
-      return;
-    }
-    if (button == &keypadButton2 && currentState.getName() == state2.getName()){
-      Serial.println("It was button 2.");
-      Serial.println(currentState.getName());
-      return;
-    }
-    currentState = state0;
-  }
-/*
-  switch (eventType) {
-    case AceButton::kEventPressed:
+void state_1_enter(){
+  Serial.println("Entering STATE_1");
+  current_state = 1;
+}
 
-      break;
-  }
-  */
+void state_1_exit(){
+  Serial.println("Exiting STATE_1");
+}
+
+void on_trans_state_0_state_1()
+{
+  Serial.println("Transitioning from STATE_0 to STATE_1");
+}
+
+void on_trans_state_1_state_0()
+{
+  Serial.println("Transitioning from STATE_1 to STATE_0");
+}
+
+void on_trans_state_0_state_0(){
+  Serial.println("Transitioning from STATE_0 to STATE_0");
+}
+
+void on_trans_state_1_state_1(){
+  Serial.println("Transitioning from STATE_1 to STATE_1");
 }
