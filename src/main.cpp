@@ -4,6 +4,8 @@
 
 using namespace ace_button;
 
+#define ENABLE_SERIAL 1
+
 // function prototypes
 void handleKeypadEvent(AceButton* button, uint8_t eventType, uint8_t buttonState);
 void setupKeypad();
@@ -11,6 +13,7 @@ void setupLED();
 void setupFSM();
 void state_x_enter();
 void state_x_exit();
+void state_x_state();
 void state_0_enter();
 void state_0_exit();
 void state_1_enter();
@@ -33,10 +36,6 @@ void on_trans_state_3_state_4();
 void on_trans_state_3_state_x();
 void on_trans_state_4_state_0();
 void on_trans_state_4_state_4();
-
-
-
-#define ENABLE_SERIAL 0
 
 const int KEYPAD_1_PIN = 2;     // KeyPad button mapped to pin
 const int KEYPAD_2_PIN = 3;     // KeyPad button mapped to pin
@@ -62,18 +61,18 @@ int buttonPressCount = 0;
 int current_state;
 
 /// define states
-State state_x(state_x_enter, NULL, &state_x_exit);
-State state_0(state_0_enter, NULL, &state_0_exit);
-State state_1(state_1_enter, NULL, &state_1_exit);
-State state_2(state_2_enter, NULL, &state_2_exit);
-State state_3(state_3_enter, NULL, &state_3_exit);
-State state_4(state_4_enter, NULL, &state_4_exit);
+State state_x(&state_x_enter, &state_x_state, &state_x_exit);
+State state_0(&state_0_enter, NULL, &state_0_exit);
+State state_1(&state_1_enter, NULL, &state_1_exit);
+State state_2(&state_2_enter, NULL, &state_2_exit);
+State state_3(&state_3_enter, NULL, &state_3_exit);
+State state_4(&state_4_enter, NULL, &state_4_exit);
 
 /// define Fsm
 Fsm fsm_button(&state_0);
 
 void setup() {
-  #if ENABLE_SERIAL == 0
+  #if ENABLE_SERIAL == 1
     Serial.begin(9600);
   #endif
 
@@ -89,6 +88,7 @@ void setup() {
 }
 
 void loop() {
+  fsm_button.run_machine();
   keypadButton1.check();
   keypadButton2.check();
   keypadButton3.check();
@@ -104,8 +104,9 @@ void handleKeypadEvent(AceButton* button, uint8_t eventType, uint8_t buttonState
     #endif
     switch(current_state) {
       case -1 : // in state x
-        if (buttonPressCount == 4) {
+        if (buttonPressCount >= 4) {
           // display red led.
+          Serial.println("Pin failed on button check");
           digitalWrite(LED_BUILTIN, HIGH);
           fsm_button.trigger(RESET);
         } else {
@@ -145,7 +146,7 @@ void handleKeypadEvent(AceButton* button, uint8_t eventType, uint8_t buttonState
         }
         break;
 
-      case 4  : // in state 3
+      case 4  : // in state 4
         fsm_button.trigger(SUCCESS);
         break;
 
@@ -216,6 +217,16 @@ void state_x_exit(){
   #endif
 }
 
+void state_x_state(){
+  //Serial.println("Running STATE_x_STATE");
+  if (buttonPressCount >= 4) {
+    // display red led.
+    Serial.println("Pin failed");
+    digitalWrite(LED_BUILTIN, HIGH);
+    fsm_button.trigger(RESET);
+  }
+}
+
 void state_0_enter(){
   #if ENABLE_SERIAL == 1
     Serial.println("Entering STATE_0");
@@ -228,6 +239,7 @@ void state_0_exit(){
   #if ENABLE_SERIAL == 1
     Serial.println("Exiting STATE_0");
   #endif
+  // Disable LED if previous attempt was failure
   digitalWrite(LED_BUILTIN, LOW);
 }
 
